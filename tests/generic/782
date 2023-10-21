@@ -1,0 +1,40 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Horst Birthelmer.  All Rights Reserved.
+#
+# FS QA Test 730
+#
+# what am I here for?
+#
+# test revalidate without file change 
+#
+. ./common/preamble
+_begin_fstest auto
+
+# Override the default cleanup function.
+# _cleanup()
+# {
+# 	cd /
+# 	rm -r -f $tmp.*
+# }
+
+# Import common functions.
+# . ./common/filter
+
+
+_supported_fs fuse
+_require_test
+_require_scratch
+
+_scratch_mount 
+echo "a" > $SCRATCH_MNT/test_file
+echo "b" >> $SCRATCH_MNT/test_file
+echo "c" >> $SCRATCH_MNT/test_file
+cat $SCRATCH_MNT/test_file
+rm -f $SCRATCH_MNT/test_file
+cat $SCRATCH_MNT/test_file
+echo "Silence is golden"
+status=0
+# if error
+exit
+

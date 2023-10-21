@@ -1,0 +1,49 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Horst Birthelmer.  All Rights Reserved.
+#
+# FS QA Test 729
+#
+# what am I here for?
+#
+# test dir open
+#
+. ./common/preamble
+_begin_fstest auto
+
+# Override the default cleanup function.
+# _cleanup()
+# {
+# 	cd /
+# 	rm -r -f $tmp.*
+# }
+
+# Import common functions.
+# . ./common/filter
+
+
+_supported_fs fuse
+_require_test
+_require_scratch
+
+srcdir=/tmp/src
+
+d_low=$srcdir/dir
+mkdir -p $d_low
+
+_scratch_mount "-o source=$srcdir"
+cat $SCRATCH_MNT/dir
+rmdir $d_low
+
+echo "Silence is golden"
+status=
+# if error
+exit
+
+# optional stuff if your test has verbose output to help resolve problems
+#echo
+#echo "If failure, check $seqres.full (this) and $seqres.full.ok (reference)"
+
+# success, all done
+status=0
+exit
