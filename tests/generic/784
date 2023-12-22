@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0
 # Copyright (c) 2023 Horst Birthelmer.  All Rights Reserved.
 #
-# FS QA Test 732
+# FS QA Test 784
 #
 # test revalidate by underlying file change but with O_CREAT included.
 # test dentry creation by the atomic revalidate 
@@ -10,28 +10,16 @@
 . ./common/preamble
 _begin_fstest auto
 
-# Override the default cleanup function.
-# _cleanup()
-# {
-# 	cd /
-# 	rm -r -f $tmp.*
-# }
-
-# Import common functions.
-# . ./common/filter
-
-
 _supported_fs fuse
 _require_test
 _require_scratch
 
-srcdir=/tmp/src
-mkdir -p $srcdir
+source="${SCRATCH_DEV#"source:"}"
 
-s_file=$srcdir/test_file
+s_file=$source/test_file
 d_file=$SCRATCH_MNT/test_file
 
-_scratch_mount "-o source=$srcdir"
+_scratch_mount 
 echo "atod" > $d_file
 cat $d_file
 cat $s_file
