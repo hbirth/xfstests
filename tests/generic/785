@@ -27,7 +27,7 @@ else
 	echo "Silence is golden"
 	status=0
 fi
-#rm $source_file
-#rm $source_file_link
+rm $source_file
+rm $source_file_link
 exit
 
