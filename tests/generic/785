@@ -1,0 +1,33 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Horst Birthelmer.  All Rights Reserved.
+#
+# test symlink read
+#
+. ./common/preamble
+_begin_fstest auto
+
+_supported_fs fuse
+_require_test
+_require_scratch
+_scratch_mount
+
+PATTERN="aa"
+
+source_file=$SCRATCH_MNT/source_file
+source_file_link=$SCRATCH_MNT/source_file_link
+
+echo $PATTERN > $source_file
+ln -s $source_file $source_file_link
+RES="$(cat $source_file_link)"
+if [[ $? -ne 0 || "$PATTERN" != "$RES" ]]; then
+	echo "failed to open symlink"
+	status=11
+else
+	echo "Silence is golden"
+	status=0
+fi
+rm $source_file
+rm $source_file_link
+exit
+

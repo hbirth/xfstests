@@ -1,0 +1,35 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Horst Birthelmer.  All Rights Reserved.
+#
+#
+# atomic open revalidate underlying change
+#
+. ./common/preamble
+_begin_fstest auto
+
+_supported_fs fuse
+_require_test
+_require_scratch
+
+source="${SCRATCH_DEV#"source:"}"
+s_file=$source/test_file
+d_file=$SCRATCH_MNT/test_file
+
+_scratch_mount 
+
+echo "atod" > $d_file
+rm -f $s_file
+str="b"
+echo "$str" > $s_file
+reval=$(cat $d_file)
+if [ "$str" != "$reval" ]; then
+  echo "String mismatch"
+  echo "written $str and read $reval"
+  exit 1
+fi
+rm -f $d_file
+
+status=0
+exit
+
