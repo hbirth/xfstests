@@ -52,34 +52,6 @@ setup_zeroed_file()
 	cmp $fsv_orig_file $fsv_file
 }
 
-round_up_to_page_boundary()
-{
-	local n=$1
-	local page_size=$(_get_page_size)
-
-	echo $(( (n + page_size - 1) & ~(page_size - 1) ))
-}
-
-mread()
-{
-	local file=$1
-	local offset=$2
-	local length=$3
-	local map_len=$(round_up_to_page_boundary $(_get_filesize $file))
-
-	# Some callers expect xfs_io to crash with SIGBUS due to the mread,
-	# causing the shell to print "Bus error" to stderr.  To allow this
-	# message to be redirected, execute xfs_io in a new shell instance.
-	# However, for this to work reliably, we also need to prevent the new
-	# shell instance from optimizing out the fork and directly exec'ing
-	# xfs_io.  The easiest way to do that is to append 'true' to the
-	# commands, so that xfs_io is no longer the last command the shell sees.
-	# Don't let it write core files to the filesystem.
-	bash -c "trap '' SIGBUS; ulimit -c 0; $XFS_IO_PROG -r $file \
-		-c 'mmap -r 0 $map_len' \
-		-c 'mread -v $offset $length'; true"
-}
-
 corruption_test()
 {
 	local block_size=$1
@@ -142,7 +114,7 @@ corruption_test()
 	fi
 
 	# Reading the full file via mmap should fail.
-	mread $fsv_file 0 $file_len >/dev/null 2>$tmp.err
+	_mread $fsv_file 0 $file_len >/dev/null 2>$tmp.err
 	if ! grep -q 'Bus error' $tmp.err; then
 		echo "Didn't see SIGBUS when reading file via mmap"
 		cat $tmp.err
@@ -150,7 +122,7 @@ corruption_test()
 
 	# Reading just the corrupted part via mmap should fail.
 	if ! $is_merkle_tree; then
-		mread $fsv_file $zap_offset $zap_len >/dev/null 2>$tmp.err
+		_mread $fsv_file $zap_offset $zap_len >/dev/null 2>$tmp.err
 		if ! grep -q 'Bus error' $tmp.err; then
 			echo "Didn't see SIGBUS when reading corrupted part via mmap"
 			cat $tmp.err
@@ -174,10 +146,10 @@ corrupt_eof_block_test()
 	head -c $zap_len /dev/zero | tr '\0' X \
 		| _fsv_scratch_corrupt_bytes $fsv_file $file_len
 
-	mread $fsv_file $file_len $zap_len >$tmp.out 2>$tmp.err
+	_mread $fsv_file $file_len $zap_len >$tmp.out 2>$tmp.err
 
 	head -c $file_len /dev/zero >$tmp.zeroes
-	mread $tmp.zeroes $file_len $zap_len >$tmp.zeroes_out
+	_mread $tmp.zeroes $file_len $zap_len >$tmp.zeroes_out
 
 	grep -q 'Bus error' $tmp.err || diff $tmp.out $tmp.zeroes_out
 }
@@ -195,6 +167,21 @@ test_block_size()
 	corruption_test $block_size 131072 4091 5
 	corruption_test $block_size 131072 65536 65536
 	corruption_test $block_size 131072 131067 5
+
+	# Test corrupting a block in files of length 1..4 blocks, and test
+	# corrupting each block of a 4-block file.  This ensures that all code
+	# paths that might exist due to multi-block hashing optimizations the
+	# fsverity implementation may use get covered, assuming no more than 4
+	# blocks are hashed at once.  E.g., consider an fsverity implementation
+	# that verifies sets of blocks but has a bug when given a single block,
+	# or that has a bug that makes it not verify all the blocks of each set.
+	local i
+	for i in $(seq 1 4); do
+		corruption_test $block_size $((i*block_size)) $((block_size/2)) 5
+	done
+	for i in $(seq 0 3); do
+		corruption_test $block_size $((4*block_size)) $((i*block_size)) 5
+	done
 
 	corrupt_eof_block_test $block_size 130999 72
 

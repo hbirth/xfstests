@@ -7,7 +7,7 @@
 # Make sure that swapext won't touch a swap file.
 
 . ./common/preamble
-_begin_fstest auto quick fiexchange swapext
+_begin_fstest auto quick swapext
 
 # Override the default cleanup function.
 _cleanup()
@@ -21,7 +21,7 @@ _cleanup()
 . ./common/filter
 
 # real QA test starts here
-_require_xfs_io_command swapext '-v exchrange'
+_require_xfs_io_command swapext
 _require_test
 
 dir=$TEST_DIR/test-$seq

@@ -10,7 +10,7 @@
 # caller wants a full file replacement.
 
 . ./common/preamble
-_begin_fstest auto quick fiexchange swapext
+_begin_fstest auto quick fiexchange
 
 # Override the default cleanup function.
 _cleanup()
@@ -23,7 +23,7 @@ _cleanup()
 . ./common/filter
 
 # real QA test starts here
-_require_xfs_io_command swapext '-v exchrange'
+_require_xfs_io_command exchangerange
 _require_xfs_io_command startupdate '-e'
 _require_test
 

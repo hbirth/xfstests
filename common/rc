@@ -52,6 +52,37 @@ _pwrite_byte() {
 	$XFS_IO_PROG $xfs_io_args -f -c "pwrite -S $pattern $offset $len" "$file"
 }
 
+_round_up_to_page_boundary()
+{
+	local n=$1
+	local page_size=$(_get_page_size)
+
+	echo $(( (n + page_size - 1) & ~(page_size - 1) ))
+}
+
+# You can override the $map_len but its optional, by default we use the
+# max allowed size. If you use a length greater than the default you can
+# expect a SIBGUS and test for it.
+_mread()
+{
+	local file=$1
+	local offset=$2
+	local length=$3
+	local map_len=${4:-$(_round_up_to_page_boundary $(_get_filesize $file)) }
+
+	# Some callers expect xfs_io to crash with SIGBUS due to the mread,
+	# causing the shell to print "Bus error" to stderr.  To allow this
+	# message to be redirected, execute xfs_io in a new shell instance.
+	# However, for this to work reliably, we also need to prevent the new
+	# shell instance from optimizing out the fork and directly exec'ing
+	# xfs_io.  The easiest way to do that is to append 'true' to the
+	# commands, so that xfs_io is no longer the last command the shell sees.
+	# Don't let it write core files to the filesystem.
+	bash -c "trap '' SIGBUS; ulimit -c 0; $XFS_IO_PROG -r $file \
+		-c 'mmap -r 0 $map_len' \
+		-c 'mread -v $offset $length'; true"
+}
+
 # mmap-write a byte into a range of a file
 _mwrite_byte() {
 	local pattern="$1"
@@ -118,6 +149,29 @@ _require_hugepages()
 {
 	awk '/Hugepagesize/ {print $2}' /proc/meminfo | grep -E -q ^[0-9]+$ || \
 		_notrun "Kernel does not report huge page size"
+}
+
+# Requires CONFIG_COMPACTION
+_require_vm_compaction()
+{
+	if [ ! -f /proc/sys/vm/compact_memory ]; then
+	    _notrun "Need compaction enabled CONFIG_COMPACTION=y"
+	fi
+}
+
+# Requires CONFIG_DEBUGFS and truncation knobs
+_require_split_huge_pages_knob()
+{
+	_require_debugfs
+
+	if [ ! -f $DEBUGFS_MNT/split_huge_pages ]; then
+		_notrun "Needs CONFIG_DEBUGFS and split_huge_pages"
+	fi
+}
+
+_split_huge_pages_all()
+{
+	echo 1 > $DEBUGFS_MNT/split_huge_pages
 }
 
 # Get hugepagesize in bytes
@@ -2742,6 +2796,9 @@ _require_xfs_io_command()
 		echo $testio | grep -q "invalid option" && \
 			_notrun "xfs_io $command support is missing"
 		;;
+	"parent")
+		testio=`$XFS_IO_PROG -x -c "parent" $TEST_DIR 2>&1`
+		;;
 	"pwrite")
 		# -N (RWF_NOWAIT) only works with direct vectored I/O writes
 		local pwrite_opts=" "
@@ -2771,7 +2828,7 @@ _require_xfs_io_command()
 			_notrun "xfs_io $command $param kernel support is missing"
 		param_checked="$param"
 		;;
-	"swapext")
+	"swapext"|"exchangerange")
 		$XFS_IO_PROG -f -c 'pwrite -S 0x58 0 128k -b 128k' $testfile > /dev/null
 		$XFS_IO_PROG -f -c 'truncate 128k' $testfile.1 > /dev/null
 		testio=`$XFS_IO_PROG -c "$command $param $testfile.1" $testfile 2>&1`
@@ -2987,7 +3044,7 @@ _require_debugfs()
 	local type
 
 	if [ -d "$DEBUGFS_MNT" ];then
-		type=$(findmnt -rncv -T $DEBUGFS_MNT -S debugfs -o FSTYPE)
+		type=$(findmnt -rncv -T $DEBUGFS_MNT -o FSTYPE)
 		[ "$type" = "debugfs" ] && return 0
 	fi
 
@@ -3472,6 +3529,8 @@ _get_os_name()
 
 _link_out_file_named()
 {
+	test -n "$seqfull" || _fail "need to set seqfull"
+
 	local features=$2
 	local suffix=$(FEATURES="$features" perl -e '
 		my %feathash;
@@ -3506,6 +3565,8 @@ _link_out_file_named()
 _link_out_file()
 {
 	local features
+
+	test -n "$seqfull" || _fail "need to set seqfull"
 
 	if [ $# -eq 0 ]; then
 		features="$(_get_os_name),$FSTYP"

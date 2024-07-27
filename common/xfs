@@ -1823,7 +1823,7 @@ _require_xfs_scratch_atomicswap()
 {
 	_require_xfs_mkfs_atomicswap
 	_require_scratch
-	_require_xfs_io_command swapext '-v exchrange -a'
+	_require_xfs_io_command exchangerange
 	_scratch_mkfs -m reflink=1 > /dev/null
 	_try_scratch_mount || \
 		_notrun "atomicswap dependencies not supported by scratch filesystem type: $FSTYP"
@@ -1845,5 +1845,33 @@ _require_xfs_nocrc()
 		_notrun "v4 file systems not supported"
 	_try_scratch_mount > /dev/null 2>&1 || \
 		_notrun "v4 file systems not supported"
+	_scratch_unmount
+}
+
+# Adjust MKFS_OPTIONS as necessary to avoid having parent pointers formatted
+# onto the filesystem
+_xfs_force_no_pptrs()
+{
+	# Nothing to do if parent pointers aren't supported by mkfs
+	$MKFS_XFS_PROG 2>&1 | grep -q parent=0 || return
+
+	if echo "$MKFS_OPTIONS" | grep -q 'parent='; then
+		MKFS_OPTIONS="$(echo "$MKFS_OPTIONS" | \
+				sed -e 's/parent=[01]/parent=0/g')"
+		return
+	fi
+
+	MKFS_OPTIONS="$MKFS_OPTIONS -n parent=0"
+}
+
+# this test requires the xfs parent pointers feature
+#
+_require_xfs_parent()
+{
+	_scratch_mkfs_xfs_supported -n parent > /dev/null 2>&1 \
+		|| _notrun "mkfs.xfs does not support parent pointers"
+	_scratch_mkfs_xfs -n parent > /dev/null 2>&1
+	_try_scratch_mount >/dev/null 2>&1 \
+		|| _notrun "kernel does not support parent pointers"
 	_scratch_unmount
 }
