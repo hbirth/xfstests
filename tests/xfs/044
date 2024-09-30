@@ -12,8 +12,6 @@ _begin_fstest other auto
 # Import common functions.
 . ./common/filter
 
-# real QA test starts here
-_supported_fs xfs
 
 _require_logdev
 
@@ -67,7 +65,6 @@ _unexpected()
     exit
 }
 
-# real QA test starts here
 # 
 _require_scratch
 
@@ -76,7 +73,7 @@ echo "*** mkfs"
 # this test only works for version 1 logs currently
 lversion=1
 lsize=16777216
-_scratch_mkfs_xfs -lsize=$lsize,version=$lversion >$tmp.mkfs0 2>&1
+_try_scratch_mkfs_xfs -lsize=$lsize,version=$lversion >$tmp.mkfs0 2>&1
 [ $? -ne 0 ] && \
     _notrun "Cannot mkfs for this test using MKFS_OPTIONS specified"
 _filter_mkfs <$tmp.mkfs0 2>$tmp.mkfs1

@@ -21,14 +21,12 @@ _cleanup()
 . ./common/filter
 . ./common/dump
 
-# real QA test starts here
 
 # Modify as appropriate.
-_supported_fs xfs
 _require_scratch
 _require_command "$SETCAP_PROG" setcap
 _require_command "$GETCAP_PROG" getcap
-_scratch_mkfs_xfs >>$seqres.full || _fail "mkfs failed"
+_scratch_mkfs_xfs >>$seqres.full
 _scratch_mount
 
 mkdir -p $dump_dir

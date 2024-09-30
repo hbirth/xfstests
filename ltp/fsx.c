@@ -178,6 +178,7 @@ int	dedupe_range_calls = 1;		/* -B flag disables */
 int	copy_range_calls = 1;		/* -E flag disables */
 int	exchange_range_calls = 1;	/* -0 flag disables */
 int	integrity = 0;			/* -i flag */
+int	pollute_eof = 0;		/* -e flag */
 int	fsxgoodfd = 0;
 int	o_direct;			/* -Z */
 int	aio = 0;
@@ -983,6 +984,76 @@ gendata(char *original_buf, char *good_buf, unsigned offset, unsigned size)
 	}
 }
 
+/*
+ * Pollute the EOF page with data beyond EOF prior to size change operations.
+ * This provides additional test coverage for partial EOF block/page zeroing.
+ * If the upcoming operation does not correctly zero, incorrect file data will
+ * be detected.
+ */
+void
+pollute_eofpage(unsigned int maxoff)
+{
+	unsigned offset = file_size;
+	unsigned pg_offset;
+	unsigned write_size;
+	char    *p;
+
+	/*
+	 * Nothing to do if pollution disabled or we're simulating. Simulation
+	 * only tracks file size updates and skips syscalls, so we don't want to
+	 * inject file data that won't be zeroed.
+	 */
+	if (!pollute_eof || testcalls <= simulatedopcount)
+		return;
+
+	/* write up to specified max or the end of the eof page */
+	pg_offset = offset & mmap_mask;
+	write_size = MIN(PAGE_SIZE - pg_offset, maxoff - offset);
+
+	if (!pg_offset)
+		return;
+
+	if (!quiet &&
+	    ((progressinterval && testcalls % progressinterval == 0) ||
+	    (debug &&
+	     (monitorstart == -1 ||
+	     (offset + write_size > monitorstart &&
+	      (monitorend == -1 || offset <= monitorend)))))) {
+		prt("%lld pollute_eof\t0x%x thru\t0x%x\t(0x%x bytes)\n",
+			testcalls, offset, offset + write_size - 1, write_size);
+	}
+
+	if ((p = (char *)mmap(0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+			      MAP_FILE | MAP_SHARED, fd,
+			      (off_t)(offset - pg_offset))) == MAP_FAILED) {
+		prterr("pollute_eofpage: mmap");
+		return;
+	}
+
+	/*
+	 * Write to a range just past EOF of the test file. Do not update the
+	 * good buffer because the upcoming operation is expected to zero this
+	 * range of the file.
+	 */
+	gendata(original_buf, p, pg_offset, write_size);
+
+	if (munmap(p, PAGE_SIZE) != 0)
+		prterr("pollute_eofpage: munmap");
+}
+
+/*
+ * Helper to update the tracked file size. If the offset begins beyond current
+ * EOF, zero the range from EOF to offset in the good buffer.
+ */
+void
+update_file_size(unsigned offset, unsigned size)
+{
+	if (offset > file_size) {
+		pollute_eofpage(offset + size);
+		memset(good_buf + file_size, '\0', offset - file_size);
+	}
+	file_size = offset + size;
+}
 
 void
 dowrite(unsigned offset, unsigned size)
@@ -1003,10 +1074,8 @@ dowrite(unsigned offset, unsigned size)
 	log4(OP_WRITE, offset, size, FL_NONE);
 
 	gendata(original_buf, good_buf, offset, size);
-	if (file_size < offset + size) {
-		if (file_size < offset)
-			memset(good_buf + file_size, '\0', offset - file_size);
-		file_size = offset + size;
+	if (offset + size > file_size) {
+		update_file_size(offset, size);
 		if (lite) {
 			warn("Lite file size bug in fsx!");
 			report_failure(149);
@@ -1070,10 +1139,8 @@ domapwrite(unsigned offset, unsigned size)
 	log4(OP_MAPWRITE, offset, size, FL_NONE);
 
 	gendata(original_buf, good_buf, offset, size);
-	if (file_size < offset + size) {
-		if (file_size < offset)
-			memset(good_buf + file_size, '\0', offset - file_size);
-		file_size = offset + size;
+	if (offset + size > file_size) {
+		update_file_size(offset, size);
 		if (lite) {
 			warn("Lite file size bug in fsx!");
 			report_failure(200);
@@ -1136,9 +1203,10 @@ dotruncate(unsigned size)
 
 	log4(OP_TRUNCATE, 0, size, FL_NONE);
 
-	if (size > file_size)
-		memset(good_buf + file_size, '\0', size - file_size);
-	file_size = size;
+	/* pollute the current EOF before a truncate down */
+	if (size < file_size)
+		pollute_eofpage(maxfilelen);
+	update_file_size(size, 0);
 
 	if (testcalls <= simulatedopcount)
 		return;
@@ -1247,6 +1315,9 @@ do_zero_range(unsigned offset, unsigned length, int keep_size)
 	log4(OP_ZERO_RANGE, offset, length,
 	     keep_size ? FL_KEEP_SIZE : FL_NONE);
 
+	if (!keep_size && end_offset > file_size)
+		update_file_size(offset, length);
+
 	if (testcalls <= simulatedopcount)
 		return;
 
@@ -1263,17 +1334,6 @@ do_zero_range(unsigned offset, unsigned length, int keep_size)
 	}
 
 	memset(good_buf + offset, '\0', length);
-
-	if (!keep_size && end_offset > file_size) {
-		/*
-		 * If there's a gap between the old file size and the offset of
-		 * the zero range operation, fill the gap with zeroes.
-		 */
-		if (offset > file_size)
-			memset(good_buf + file_size, '\0', offset - file_size);
-
-		file_size = end_offset;
-	}
 }
 
 #else
@@ -1307,6 +1367,9 @@ do_collapse_range(unsigned offset, unsigned length)
 	}
 
 	log4(OP_COLLAPSE_RANGE, offset, length, FL_NONE);
+
+	/* pollute current eof before collapse truncates down */
+	pollute_eofpage(maxfilelen);
 
 	if (testcalls <= simulatedopcount)
 		return;
@@ -1358,6 +1421,9 @@ do_insert_range(unsigned offset, unsigned length)
 	}
 
 	log4(OP_INSERT_RANGE, offset, length, FL_NONE);
+
+	/* pollute current eof before insert truncates up */
+	pollute_eofpage(maxfilelen);
 
 	if (testcalls <= simulatedopcount)
 		return;
@@ -1538,6 +1604,9 @@ do_clone_range(unsigned offset, unsigned length, unsigned dest)
 
 	log5(OP_CLONE_RANGE, offset, length, dest, FL_NONE);
 
+	if (dest + length > file_size)
+		update_file_size(dest, length);
+
 	if (testcalls <= simulatedopcount)
 		return;
 
@@ -1556,10 +1625,6 @@ do_clone_range(unsigned offset, unsigned length, unsigned dest)
 	}
 
 	memcpy(good_buf + dest, good_buf + offset, length);
-	if (dest > file_size)
-		memset(good_buf + file_size, '\0', dest - file_size);
-	if (dest + length > file_size)
-		file_size = dest + length;
 }
 
 #else
@@ -1756,6 +1821,9 @@ do_copy_range(unsigned offset, unsigned length, unsigned dest)
 
 	log5(OP_COPY_RANGE, offset, length, dest, FL_NONE);
 
+	if (dest + length > file_size)
+		update_file_size(dest, length);
+
 	if (testcalls <= simulatedopcount)
 		return;
 
@@ -1792,10 +1860,6 @@ do_copy_range(unsigned offset, unsigned length, unsigned dest)
 	}
 
 	memcpy(good_buf + dest, good_buf + offset, length);
-	if (dest > file_size)
-		memset(good_buf + file_size, '\0', dest - file_size);
-	if (dest + length > file_size)
-		file_size = dest + length;
 }
 
 #else
@@ -1846,7 +1910,7 @@ do_preallocate(unsigned offset, unsigned length, int keep_size)
 
 	if (end_offset > file_size) {
 		memset(good_buf + file_size, '\0', end_offset - file_size);
-		file_size = end_offset;
+		update_file_size(offset, length);
 	}
 
 	if (testcalls <= simulatedopcount)
@@ -2390,6 +2454,7 @@ usage(void)
 	-b opnum: beginning operation number (default 1)\n\
 	-c P: 1 in P chance of file close+open at each op (default infinity)\n\
 	-d: debug output for all operations\n\
+	-e: pollute post-eof on size changes (default 0)\n\
 	-f: flush and invalidate cache after I/O\n\
 	-g X: write character X instead of random generated data\n\
 	-i logdev: do integrity testing, logdev is the dm log writes device\n\
@@ -2788,7 +2853,7 @@ main(int argc, char **argv)
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
 	while ((ch = getopt_long(argc, argv,
-				 "0b:c:dfg:i:j:kl:m:no:p:qr:s:t:w:xyABD:EFJKHzCILN:OP:RS:UWXZ",
+				 "0b:c:de:fg:i:j:kl:m:no:p:qr:s:t:w:xyABD:EFJKHzCILN:OP:RS:UWXZ",
 				 longopts, NULL)) != EOF)
 		switch (ch) {
 		case 'b':
@@ -2809,6 +2874,11 @@ main(int argc, char **argv)
 			break;
 		case 'd':
 			debug = 1;
+			break;
+		case 'e':
+			pollute_eof = getnum(optarg, &endp);
+			if (pollute_eof < 0 || pollute_eof > 1)
+				usage();
 			break;
 		case 'f':
 			flush = 1;

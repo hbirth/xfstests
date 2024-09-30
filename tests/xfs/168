@@ -18,7 +18,7 @@ _begin_fstest auto growfs shrinkfs ioctl prealloc stress
 
 create_scratch()
 {
-	_scratch_mkfs_xfs $@ | tee -a $seqres.full | \
+	_try_scratch_mkfs_xfs $@ | tee -a $seqres.full | \
 		_filter_mkfs 2>$tmp.mkfs >/dev/null
 	. $tmp.mkfs
 
@@ -43,12 +43,10 @@ stress_scratch()
 	$FSSTRESS_PROG $FSSTRESS_ARGS >> $seqres.full 2>&1
 }
 
-# real QA test starts here
-_supported_fs xfs
 _require_scratch_xfs_shrink
 _require_xfs_io_command "falloc"
 
-_scratch_mkfs_xfs | tee -a $seqres.full | _filter_mkfs 2>$tmp.mkfs >/dev/null
+_try_scratch_mkfs_xfs | tee -a $seqres.full | _filter_mkfs 2>$tmp.mkfs >/dev/null
 . $tmp.mkfs	# extract blocksize and data size for scratch device
 
 endsize=`expr 125 \* 1048576`	# stop after shrinking this big

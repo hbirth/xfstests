@@ -21,8 +21,6 @@ _cleanup()
     rm -f $tmp.*
 }
 
-# real QA test starts here
-_supported_fs xfs
 _require_test
 _require_scratch
 
@@ -38,7 +36,7 @@ else
 	_notrun "Installed libc doesn't correctly handle setrlimit/ftruncate64"
 fi
 
-_scratch_mkfs_xfs >>$seqres.full || _fail "mkfs failed"
+_scratch_mkfs_xfs >>$seqres.full
 _scratch_mount
 _create_dumpdir_largefile
 echo "ls dumpdir/largefile"

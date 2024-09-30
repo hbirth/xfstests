@@ -20,15 +20,13 @@ _cleanup()
 # Import common functions.
 . ./common/filter
 
-# real QA test starts here
-_supported_fs xfs
 
 _require_scratch
 _require_xfs_io_command "falloc"
 
 _scratch_unmount >/dev/null 2>&1
 
-_scratch_mkfs_xfs >/dev/null	|| _fail "mkfs failed"
+_scratch_mkfs_xfs >/dev/null
 _scratch_mount
 
 # check there's enough freespace on $SCRATCH_MNT ... (1GiB + 1MiB)

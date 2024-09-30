@@ -29,7 +29,6 @@ filter_dbval()
 . ./common/filter
 
 # Modify as appropriate
-_supported_fs xfs
 
 # Since we have an open-coded mkfs call, disable the external devices and
 # don't let the post-check fsck actually run since it'll trip over us not
@@ -40,7 +39,6 @@ export SCRATCH_RTDEV=
 
 echo "Silence is golden."
 
-# real QA test starts here
 
 # for different sector sizes, ensure no CRC errors are falsely reported.
 
@@ -52,7 +50,7 @@ echo "Silence is golden."
 # NOTE: skip attr3, bmapbta, bmapbtd, dir3, dqblk, inodata, symlink
 # rtbitmap, rtsummary, log
 #
-sec_sz=`_min_dio_alignment $SCRATCH_DEV`
+sec_sz=`blockdev --getss $SCRATCH_DEV`
 while [ $sec_sz -le 4096 ]; do
 	sector_sizes="$sector_sizes $sec_sz"
 	sec_sz=$((sec_sz * 2))

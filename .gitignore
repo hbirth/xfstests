@@ -72,9 +72,11 @@ tags
 /src/deduperace
 /src/detached_mounts_propagation
 /src/devzero
+/src/dio-append-buf-fault
 /src/dio-buf-fault
 /src/dio-interleaved
 /src/dio-invalidate-cache
+/src/dio-write-fsync-same-fd
 /src/dirhash_collide
 /src/dirperf
 /src/dirstress
@@ -170,7 +172,6 @@ tags
 /src/t_snapshot_deleted_subvolume
 /src/t_stripealign
 /src/t_truncate_cmtime
-/src/t_truncate_self
 /src/test-nextquota
 /src/testx
 /src/trunc
@@ -206,6 +207,7 @@ tags
 /src/log-writes/replay-log
 /src/perf/*.pyc
 /src/fiemap-fault
+/src/min_dio_alignment
 
 # Symlinked files
 /tests/generic/035.out

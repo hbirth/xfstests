@@ -12,8 +12,6 @@ _begin_fstest rw auto realtime
 # Import common functions.
 . ./common/filter
 
-# real QA test starts here
-_supported_fs xfs
 _require_realtime
 _require_scratch
 
@@ -25,7 +23,7 @@ _filter_io()
 _create_scratch()
 {
 	echo "*** mkfs"
-	if ! _scratch_mkfs_xfs >$tmp.out 2>&1
+	if ! _try_scratch_mkfs_xfs >$tmp.out 2>&1
 	then
 		cat $tmp.out
 		echo "failed to mkfs $SCRATCH_DEV"

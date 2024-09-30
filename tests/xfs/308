@@ -15,8 +15,6 @@ _begin_fstest auto quick clone
 . ./common/filter
 . ./common/reflink
 
-# real QA test starts here
-_supported_fs xfs
 _require_scratch_reflink
 
 echo "Format"
@@ -129,9 +127,6 @@ _scratch_mount
 _scratch_unmount
 
 _dump_status "supposedly fixed fs config" >> $seqres.full
-
-echo "Look for no more leftover warning in xfs_check"
-_scratch_xfs_check | _filter_leftover
 
 echo "Look for no more leftover warning in xfs_repair"
 _scratch_xfs_repair -n 2>&1 | _filter_leftover

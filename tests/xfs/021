@@ -52,8 +52,6 @@ do_getfattr()
 	return $exit
 }
 
-# real QA test starts here
-_supported_fs xfs
 
 _require_scratch
 _require_attrs
@@ -61,8 +59,7 @@ _require_attrs
 _scratch_unmount >/dev/null 2>&1
 
 echo "*** mkfs"
-_scratch_mkfs_xfs >/dev/null \
-	|| _fail "mkfs failed"
+_scratch_mkfs_xfs >/dev/null
 
 echo "*** mount FS"
 _scratch_mount
