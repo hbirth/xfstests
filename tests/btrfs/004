@@ -24,7 +24,6 @@ _cleanup()
 
 . ./common/filter
 
-_supported_fs btrfs
 _require_scratch
 _require_no_large_scratch_dev
 _require_btrfs_command inspect-internal logical-resolve
@@ -166,7 +165,7 @@ workout()
 	_btrfs subvolume snapshot $SCRATCH_MNT \
 		$SCRATCH_MNT/$snap_name
 
-	run_check _scratch_unmount >/dev/null 2>&1
+	run_check _scratch_unmount
 	_scratch_mount "-o compress=lzo"
 
 	# make some noise but ensure we're not touching existing data
@@ -180,7 +179,7 @@ workout()
 	# now make more files to get a higher tree
 	run_check $FSSTRESS_PROG -d $clean_dir -w -p $procs -n 2000 \
 		$FSSTRESS_AVOID
-	run_check _scratch_unmount >/dev/null 2>&1
+	run_check _scratch_unmount
 	_scratch_mount "-o atime"
 
 	if [ $do_bg_noise -ne 0 ]; then

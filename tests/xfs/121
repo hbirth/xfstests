@@ -17,16 +17,13 @@ _begin_fstest shutdown log auto quick
 . ./common/filter
 . ./common/log
 
-# real QA test starts here
-_supported_fs xfs
 
 rm -f $tmp.log
 
 _require_scratch
 
 echo "mkfs"
-_scratch_mkfs_xfs >>$seqres.full 2>&1 \
-    || _fail "mkfs scratch failed"
+_scratch_mkfs_xfs >>$seqres.full 2>&1
 
 echo "mount"
 _scratch_mount

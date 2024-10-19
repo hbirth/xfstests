@@ -7,14 +7,12 @@
 # Tests xfs_growfs on a reflinked filesystem
 #
 . ./common/preamble
-_begin_fstest auto quick clone
+_begin_fstest auto quick clone growfs
 
 # Import common functions.
 . ./common/filter
 . ./common/reflink
 
-# real QA test starts here
-_supported_fs xfs
 _require_scratch_reflink
 _require_no_large_scratch_dev
 _require_cp_reflink

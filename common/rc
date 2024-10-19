@@ -52,6 +52,37 @@ _pwrite_byte() {
 	$XFS_IO_PROG $xfs_io_args -f -c "pwrite -S $pattern $offset $len" "$file"
 }
 
+_round_up_to_page_boundary()
+{
+	local n=$1
+	local page_size=$(_get_page_size)
+
+	echo $(( (n + page_size - 1) & ~(page_size - 1) ))
+}
+
+# You can override the $map_len but its optional, by default we use the
+# max allowed size. If you use a length greater than the default you can
+# expect a SIBGUS and test for it.
+_mread()
+{
+	local file=$1
+	local offset=$2
+	local length=$3
+	local map_len=${4:-$(_round_up_to_page_boundary $(_get_filesize $file)) }
+
+	# Some callers expect xfs_io to crash with SIGBUS due to the mread,
+	# causing the shell to print "Bus error" to stderr.  To allow this
+	# message to be redirected, execute xfs_io in a new shell instance.
+	# However, for this to work reliably, we also need to prevent the new
+	# shell instance from optimizing out the fork and directly exec'ing
+	# xfs_io.  The easiest way to do that is to append 'true' to the
+	# commands, so that xfs_io is no longer the last command the shell sees.
+	# Don't let it write core files to the filesystem.
+	bash -c "trap '' SIGBUS; ulimit -c 0; $XFS_IO_PROG -r $file \
+		-c 'mmap -r 0 $map_len' \
+		-c 'mread -v $offset $length'; true"
+}
+
 # mmap-write a byte into a range of a file
 _mwrite_byte() {
 	local pattern="$1"
@@ -120,6 +151,29 @@ _require_hugepages()
 		_notrun "Kernel does not report huge page size"
 }
 
+# Requires CONFIG_COMPACTION
+_require_vm_compaction()
+{
+	if [ ! -f /proc/sys/vm/compact_memory ]; then
+	    _notrun "Need compaction enabled CONFIG_COMPACTION=y"
+	fi
+}
+
+# Requires CONFIG_DEBUGFS and truncation knobs
+_require_split_huge_pages_knob()
+{
+	_require_debugfs
+
+	if [ ! -f $DEBUGFS_MNT/split_huge_pages ]; then
+		_notrun "Needs CONFIG_DEBUGFS and split_huge_pages"
+	fi
+}
+
+_split_huge_pages_all()
+{
+	echo 1 > $DEBUGFS_MNT/split_huge_pages
+}
+
 # Get hugepagesize in bytes
 _get_hugepagesize()
 {
@@ -186,7 +240,7 @@ _scratch_options()
     "xfs")
 	_scratch_xfs_options "$@"
 	;;
-    ext2|ext3|ext4|ext4dev)
+    ext2|ext3|ext4)
 	_scratch_ext4_options "$@"
 	;;
     esac
@@ -730,7 +784,7 @@ _scratch_mkfs()
 		return $?
 		;;
 	xfs)
-		_scratch_mkfs_xfs $*
+		_try_scratch_mkfs_xfs $*
 		return $?
 		;;
 	udf)
@@ -984,7 +1038,7 @@ _try_scratch_mkfs_sized()
 	btrfs)
 		def_blksz=`echo $MKFS_OPTIONS | sed -rn 's/.*-s ?+([0-9]+).*/\1/p'`
 		;;
-	ext2|ext3|ext4|ext4dev|reiser4|ocfs2|reiserfs)
+	ext2|ext3|ext4|reiser4|ocfs2|reiserfs)
 		def_blksz=`echo $MKFS_OPTIONS | sed -rn 's/.*-b ?+([0-9]+).*/\1/p'`
 		;;
 	udf)
@@ -1036,12 +1090,13 @@ _try_scratch_mkfs_sized()
 		# don't override MKFS_OPTIONS that set a block size.
 		echo $MKFS_OPTIONS |grep -E -q "b\s*size="
 		if [ $? -eq 0 ]; then
-			_scratch_mkfs_xfs -d size=$fssize $rt_ops
+			_try_scratch_mkfs_xfs -d size=$fssize $rt_ops
 		else
-			_scratch_mkfs_xfs -d size=$fssize $rt_ops -b size=$blocksize
+			_try_scratch_mkfs_xfs -d size=$fssize $rt_ops \
+				-b size=$blocksize
 		fi
 		;;
-	ext2|ext3|ext4|ext4dev)
+	ext2|ext3|ext4)
 		# Can't use _scratch_mkfs_ext4 here because the block count has
 		# to come after the device path.
 		if [ "$USE_EXTERNAL" = yes -a ! -z "$SCRATCH_LOGDEV" ]; then
@@ -1114,7 +1169,7 @@ _try_scratch_mkfs_sized()
 
 _scratch_mkfs_sized()
 {
-	_try_scratch_mkfs_sized $* || _fail "_scratch_mkfs_sized failed with ($*)"
+	_try_scratch_mkfs_sized $* || _notrun "_scratch_mkfs_sized failed with ($*)"
 }
 
 # Emulate an N-data-disk stripe w/ various stripe units
@@ -1145,7 +1200,7 @@ _scratch_mkfs_geom()
 		MKFS_OPTIONS+=" -d su=$sunit_bytes,sw=$swidth_mult"
 	fi
 	;;
-    ext4|ext4dev)
+    ext4)
 	MKFS_OPTIONS+=" -b $blocksize -E stride=$sunit_blocks,stripe_width=$swidth_blocks"
 	;;
     *)
@@ -1180,7 +1235,7 @@ _scratch_mkfs_blocksized()
 		_scratch_mkfs --sectorsize=$blocksize
 		;;
 	xfs)
-		_scratch_mkfs_xfs $MKFS_OPTIONS -b size=$blocksize
+		_try_scratch_mkfs_xfs $MKFS_OPTIONS -b size=$blocksize
 		;;
 	ext2|ext3|ext4)
 		_scratch_mkfs_ext4 $MKFS_OPTIONS -b $blocksize
@@ -2742,6 +2797,9 @@ _require_xfs_io_command()
 		echo $testio | grep -q "invalid option" && \
 			_notrun "xfs_io $command support is missing"
 		;;
+	"parent")
+		testio=`$XFS_IO_PROG -x -c "parent" $TEST_DIR 2>&1`
+		;;
 	"pwrite")
 		# -N (RWF_NOWAIT) only works with direct vectored I/O writes
 		local pwrite_opts=" "
@@ -2771,7 +2829,7 @@ _require_xfs_io_command()
 			_notrun "xfs_io $command $param kernel support is missing"
 		param_checked="$param"
 		;;
-	"swapext")
+	"swapext"|"exchangerange")
 		$XFS_IO_PROG -f -c 'pwrite -S 0x58 0 128k -b 128k' $testfile > /dev/null
 		$XFS_IO_PROG -f -c 'truncate 128k' $testfile.1 > /dev/null
 		testio=`$XFS_IO_PROG -c "$command $param $testfile.1" $testfile 2>&1`
@@ -2987,7 +3045,7 @@ _require_debugfs()
 	local type
 
 	if [ -d "$DEBUGFS_MNT" ];then
-		type=$(findmnt -rncv -T $DEBUGFS_MNT -S debugfs -o FSTYPE)
+		type=$(findmnt -rncv -T $DEBUGFS_MNT -o FSTYPE)
 		[ "$type" = "debugfs" ] && return 0
 	fi
 
@@ -3472,6 +3530,8 @@ _get_os_name()
 
 _link_out_file_named()
 {
+	test -n "$seqfull" || _fail "need to set seqfull"
+
 	local features=$2
 	local suffix=$(FEATURES="$features" perl -e '
 		my %feathash;
@@ -3506,6 +3566,8 @@ _link_out_file_named()
 _link_out_file()
 {
 	local features
+
+	test -n "$seqfull" || _fail "need to set seqfull"
 
 	if [ $# -eq 0 ]; then
 		features="$(_get_os_name),$FSTYP"
@@ -4233,21 +4295,6 @@ _scale_fsstress_args()
         shift
     done
     printf '%s\n' "$args"
-}
-
-#
-# Return the logical block size if running on a block device,
-# else substitute the page size.
-#
-_min_dio_alignment()
-{
-    local dev=$1
-
-    if [ -b "$dev" ]; then
-        blockdev --getss $dev
-    else
-        $here/src/feature -s
-    fi
 }
 
 run_check()
@@ -5131,6 +5178,30 @@ _require_fibmap()
 	rm -f $file
 }
 
+_require_statx_unique_mountid()
+{
+	# statx(STATX_MNT_ID=0x1000) was added in Linux 5.8.
+	# statx(STATX_MNT_ID_UNIQUE=0x4000) was added in Linux 6.9.
+	# We only need to check the latter.
+
+	export STATX_MNT_ID_UNIQUE=0x4000
+	local statx_mask=$(
+		${XFS_IO_PROG} -c "statx -m $STATX_MNT_ID_UNIQUE -r" "$TEST_DIR" |
+		sed -En 's/stat\.mask = (0x[0-9a-f]+)/\1/p'
+	)
+
+	[[ $(( statx_mask & STATX_MNT_ID_UNIQUE )) == $((STATX_MNT_ID_UNIQUE)) ]] ||
+		_notrun "statx does not support STATX_MNT_ID_UNIQUE on this kernel"
+}
+
+_require_open_by_handle_unique_mountid()
+{
+	_require_test_program "open_by_handle"
+
+	$here/src/open_by_handle -C AT_HANDLE_MNT_ID_UNIQUE 2>&1 \
+		|| _notrun "name_to_handle_at does not support AT_HANDLE_MNT_ID_UNIQUE"
+}
+
 _try_wipe_scratch_devs()
 {
 	test -x "$WIPEFS_PROG" || return 0
@@ -5431,6 +5502,20 @@ _require_duplicate_fsid()
 		_notrun "$FSTYP does not support duplicate fsid"
 		;;
 	esac
+}
+
+# Can we find a program in the $PATH?
+_have_program() {
+	command -v "$1" &>/dev/null
+}
+
+# Require that a program can be found via the $PATH, or complain otherwise
+_require_program() {
+	local cmd="$1"
+	local tag="$2"
+
+	test -z "$tag" && tag="$(basename "$cmd")"
+	_have_program "$1" || _notrun "$tag required"
 }
 
 init_rc

@@ -45,13 +45,11 @@ End-of-File
 . ./common/dump
 . ./common/attr
 
-# real QA test starts here
-_supported_fs xfs
 
 _require_tape $TAPE_DEV
 _require_attrs trusted user
 _require_scratch
-_scratch_mkfs_xfs >>$seqres.full || _fail "mkfs failed"
+_scratch_mkfs_xfs >>$seqres.full
 _scratch_mount
 
 _create_files

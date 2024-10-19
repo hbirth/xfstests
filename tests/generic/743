@@ -23,13 +23,11 @@ _cleanup()
 # Import common functions.
 . ./common/dmerror
 
-_fixed_by_kernel_commit XXXXXXXXXXXX \
+_fixed_by_kernel_commit 631426ba1d45 \
 	"mm/madvise: make MADV_POPULATE_(READ|WRITE) handle VM_FAULT_RETRY properly"
 
-# real QA test starts here
 
 # Modify as appropriate.
-_supported_fs generic
 _require_xfs_io_command madvise -R
 _require_scratch
 _require_dm_target error

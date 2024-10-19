@@ -56,6 +56,7 @@ fiexchange		XFS_IOC_EXCHANGE_RANGE ioctl
 freeze			filesystem freeze tests
 fsck			general fsck tests
 fsmap			FS_IOC_GETFSMAP ioctl
+fsproperties		Filesystem properties
 fsr			XFS free space reorganizer
 fuzzers			filesystem fuzz tests
 growfs			increasing the size of a filesystem
@@ -83,6 +84,7 @@ nfs4_acl		NFSv4 access control lists
 nonsamefs		overlayfs layers on different filesystems
 online_repair		online repair functionality tests
 other			dumping ground, do not add more tests to this group
+parent			Parent pointer tests
 pattern			specific IO pattern tests
 perms			access control and permission checking
 pipe			pipe functionality

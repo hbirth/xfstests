@@ -21,7 +21,7 @@ _cleanup()
 _populate_scratch()
 {
 	echo "=== mkfs output ===" >>$seqres.full
-	_scratch_mkfs_xfs | tee -a $seqres.full | _filter_mkfs 2>$tmp.mkfs
+	_try_scratch_mkfs_xfs | tee -a $seqres.full | _filter_mkfs 2>$tmp.mkfs
 	. $tmp.mkfs
 	_scratch_mount
 	# This test looks at specific behaviors of the xfs_db freesp command,
@@ -39,8 +39,6 @@ _populate_scratch()
 # Import common functions.
 . ./common/filter
 
-# real QA test starts here
-_supported_fs xfs
 
 _require_scratch
 _require_no_large_scratch_dev
@@ -84,14 +82,17 @@ then
 fi
 
 # check the 'pct' field from freesp command is good
-perl -ne '
-	    BEGIN	{ $percent = 0; }
-	    /free/	&& next;	# skip over free extent size number
-	    if (/\s+(\d+\.\d+)$/) {
-		$percent += $1;
-	    }
-	    END	{ $percent += 0.5; print int($percent), "\n" }	# round up
-' <$tmp.xfs_db >$tmp.ans
+awk '
+{
+	if ($0 ~ /free/) {
+		next;
+	}
+
+	percent += $5;
+}
+END {
+	printf("%d\n", int(percent + 0.5));
+}' < $tmp.xfs_db > $tmp.ans
 ans="`cat $tmp.ans`"
 echo "Checking percent column yields 100: $ans"
 if [ "$ans" != 100 ]

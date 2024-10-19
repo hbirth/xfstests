@@ -6,7 +6,7 @@
 #
 # Ensure that the sysadmin won't hit EDQUOT while repairing file data contents
 # even if the file's quota limits have been exceeded.  This tests the quota
-# reservation handling inside the swapext code used by repair.
+# reservation handling inside the exchangerange code used by repair.
 #
 . ./common/preamble
 _begin_fstest online_repair
@@ -17,10 +17,8 @@ _begin_fstest online_repair
 . ./common/inject
 . ./common/quota
 
-# real QA test starts here
 
 # Modify as appropriate.
-_supported_fs xfs
 _require_quota
 _require_user
 _require_scratch

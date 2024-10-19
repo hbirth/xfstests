@@ -8,7 +8,7 @@
 # the staging file; and (b) when the staging file is created empty.
 
 . ./common/preamble
-_begin_fstest auto quick fiexchange swapext
+_begin_fstest auto quick fiexchange
 
 # Override the default cleanup function.
 _cleanup()
@@ -21,7 +21,6 @@ _cleanup()
 . ./common/filter
 . ./common/reflink
 
-# real QA test starts here
 _require_xfs_io_command startupdate
 _require_test_reflink
 _require_test

@@ -6,16 +6,19 @@
 
 # Modify various files after a fuzzing operation
 _scratch_fuzz_modify() {
+	local fsstress_args=(-n $((TIME_FACTOR * 10000)) -p $((LOAD_FACTOR * 4)) )
+	test -n "${FUZZ_REWRITE_DURATION}" && fsstress_args+=("--duration=${FUZZ_REWRITE_DURATION}")
+
 	echo "+++ stressing filesystem"
 	mkdir -p $SCRATCH_MNT/data
 	[ "$FSTYP" == "xfs" ] && _xfs_force_bdev data $SCRATCH_MNT/data
-	$FSSTRESS_PROG -n $((TIME_FACTOR * 10000)) -p $((LOAD_FACTOR * 4)) -d $SCRATCH_MNT/data
+	$FSSTRESS_PROG "${fsstress_args[@]}" -d $SCRATCH_MNT/data
 
 	if [ "$FSTYP" = "xfs" ]; then
 		if _xfs_has_feature "$SCRATCH_MNT" realtime; then
 			mkdir -p $SCRATCH_MNT/rt
 			_xfs_force_bdev realtime $SCRATCH_MNT/rt
-			$FSSTRESS_PROG -n $((TIME_FACTOR * 10000)) -p $((LOAD_FACTOR * 4)) -d $SCRATCH_MNT/rt
+			$FSSTRESS_PROG "${fsstress_args[@]}" -d $SCRATCH_MNT/rt
 		else
 			echo "+++ xfs realtime not configured"
 		fi
@@ -122,7 +125,11 @@ __filter_unvalidated_xfs_db_fields() {
 	    -e '/^entries.*secure/d' \
 	    -e '/^a.sfattr.list.*value/d' \
 	    -e '/^a.sfattr.list.*root/d' \
-	    -e '/^a.sfattr.list.*secure/d'
+	    -e '/^a.sfattr.list.*secure/d' \
+	    -e '/^core.filestream/d' \
+	    -e '/^v3.bigtime/d' \
+	    -e '/\.rtbwarns/d' \
+	    -e '/\.[ib]warns/d'
 }
 
 # Filter the xfs_db print command's field debug information
@@ -375,17 +382,6 @@ __scratch_xfs_fuzz_field_offline() {
 	res=$?
 	test $res -eq 0 && \
 		(>&2 echo "${fuzz_action}: offline scrub didn't fail.")
-
-	# Make sure xfs_repair catches at least as many things as the old
-	# xfs_check did.
-	if [ -n "${SCRATCH_XFS_FUZZ_CHECK}" ]; then
-		__fuzz_notify "+ Detect fuzzed field (xfs_check)"
-		_scratch_xfs_check 2>&1
-		res1=$?
-		if [ $res1 -ne 0 ] && [ $res -eq 0 ]; then
-			(>&2 echo "${fuzz_action}: xfs_repair passed but xfs_check failed ($res1).")
-		fi
-	fi
 
 	# Repair the filesystem offline
 	__fuzz_notify "+ Try to repair the filesystem (offline)"
@@ -671,6 +667,20 @@ _scratch_xfs_set_xattr_fuzz_types() {
 	fi
 
 	SCRATCH_XFS_XATTR_FUZZ_TYPES=(EXTENTS_REMOTE3K EXTENTS_REMOTE4K LEAF NODE)
+}
+
+# Sets the array SCRATCH_XFS_QUOTA_FUZZ_IDS to the list of dquot ids available
+# for fuzzing.  By default, this list contains 0 (root), 4242 (non-root), and
+# 8484 (zero counts).  Users can override this by setting
+# SCRATCH_XFS_LIST_FUZZ_QUOTAIDS in the environment.
+_scratch_xfs_set_quota_fuzz_ids() {
+	if [ -n "${SCRATCH_XFS_LIST_FUZZ_QUOTAIDS}" ]; then
+		mapfile -t SCRATCH_XFS_QUOTA_FUZZ_IDS < \
+				<(echo "${SCRATCH_XFS_LIST_FUZZ_QUOTAIDS}" | tr '[ ,]' '[\n\n]')
+		return
+	fi
+
+	SCRATCH_XFS_QUOTA_FUZZ_IDS=(0 4242 8484)
 }
 
 # Grab the list of available fuzzing verbs

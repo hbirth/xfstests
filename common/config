@@ -234,6 +234,7 @@ export GZIP_PROG="$(type -P gzip)"
 export BTRFS_IMAGE_PROG="$(type -P btrfs-image)"
 export BTRFS_MAP_LOGICAL_PROG=$(type -P btrfs-map-logical)
 export PARTED_PROG="$(type -P parted)"
+export XFS_PROPERTY_PROG="$(type -P xfs_property)"
 
 # use 'udevadm settle' or 'udevsettle' to wait for lv to be settled.
 # newer systems have udevadm command but older systems like RHEL5 don't.
@@ -361,7 +362,7 @@ _common_mount_opts()
 	overlay)
 		echo $OVERLAY_MOUNT_OPTIONS
 		;;
-	ext2|ext3|ext4|ext4dev)
+	ext2|ext3|ext4)
 		# acls & xattrs aren't turned on by default on ext$FOO
 		echo "-o acl,user_xattr $EXT_MOUNT_OPTIONS"
 		;;
@@ -454,7 +455,7 @@ _mkfs_opts()
 _fsck_opts()
 {
 	case $FSTYP in
-	ext2|ext3|ext4|ext4dev)
+	ext2|ext3|ext4)
 		export FSCK_OPTIONS="-nf"
 		;;
 	reiser*)
@@ -500,7 +501,7 @@ _source_specific_fs()
 		[ "$MKFS_EXT4_PROG" = "" ] && _fatal "mkfs.ext4 not found"
 		. ./common/ext4
 		;;
-	ext2|ext3|ext4dev)
+	ext2|ext3)
 		. ./common/ext4
 		;;
 	f2fs)
@@ -829,10 +830,10 @@ get_next_config() {
 	fi
 
 	if [ "$FSTYP" == "tmpfs" ]; then
-		if [ -z "TEST_DEV" ]; then
+		if [ -z "$TEST_DEV" ]; then
 			export TEST_DEV=tmpfs_test
 		fi
-		if [ -z "SCRATCH_DEV" ]; then
+		if [ -z "$SCRATCH_DEV" ]; then
 			export TEST_DEV=tmpfs_scratch
 		fi
 	fi

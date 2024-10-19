@@ -360,6 +360,20 @@ _scratch_xfs_populate() {
 	mknod "${SCRATCH_MNT}/S_IFBLK" b 1 1
 	mknod "${SCRATCH_MNT}/S_IFIFO" p
 
+	# non-root dquot
+	local nonroot_id=4242
+	echo "${nonroot_id}" > "${SCRATCH_MNT}/non_root_dquot"
+	chown "${nonroot_id}:${nonroot_id}" "${SCRATCH_MNT}/non_root_dquot"
+	$XFS_IO_PROG -c "chproj ${nonroot_id}" "${SCRATCH_MNT}/non_root_dquot"
+
+	# empty dquot
+	local empty_id=8484
+	echo "${empty_id}" > "${SCRATCH_MNT}/empty_dquot"
+	chown "${empty_id}:${empty_id}" "${SCRATCH_MNT}/empty_dquot"
+	$XFS_IO_PROG -c "chproj ${empty_id}" "${SCRATCH_MNT}/empty_dquot"
+	chown "0:0" "${SCRATCH_MNT}/empty_dquot"
+	$XFS_IO_PROG -c "chproj 0" "${SCRATCH_MNT}/empty_dquot"
+
 	# special file with an xattr
 	setfacl -P -m u:nobody:r ${SCRATCH_MNT}/S_IFCHR
 
@@ -448,6 +462,48 @@ _scratch_xfs_populate() {
 		nr="$((blksz * 2 / 12))"
 		__populate_create_file $((blksz * nr)) "${SCRATCH_MNT}/REFCOUNTBT"
 		cp --reflink=always "${SCRATCH_MNT}/REFCOUNTBT" "${SCRATCH_MNT}/REFCOUNTBT2"
+	fi
+
+	# Parent pointers
+	is_pptr="$(_xfs_has_feature "$SCRATCH_MNT" parent -v)"
+	if [ $is_pptr -gt 0 ]; then
+		echo "+ parent pointers"
+
+		# Create a couple of parent pointers
+		__populate_create_dir "${SCRATCH_MNT}/PPTRS" 1 '' \
+			--hardlink --format "two_%d"
+
+		# Create one xattr leaf block of parent pointers
+		nr="$((blksz * 2 / 16))"
+		__populate_create_dir "${SCRATCH_MNT}/PPTRS" ${nr} '' \
+			--hardlink --format "many%04d"
+
+		# Create multiple xattr leaf blocks of large parent pointers
+		nr="$((blksz * 16 / 16))"
+		__populate_create_dir "${SCRATCH_MNT}/PPTRS" ${nr} '' \
+			--hardlink --format "y%0254d"
+
+		# Create multiple paths to a file
+		local moof="${SCRATCH_MNT}/PPTRS/moofile"
+		touch "${moof}"
+		for ((i = 0; i < 4; i++)); do
+			mkdir -p "${SCRATCH_MNT}/PPTRS/SUB${i}"
+			ln "${moof}" "${SCRATCH_MNT}/PPTRS/SUB${i}/moofile"
+		done
+
+		# Create parent pointers of various lengths
+		touch "${SCRATCH_MNT}/PPTRS/vlength"
+		local len_len
+		local tst
+		local fname
+		ln "${SCRATCH_MNT}/PPTRS/vlength" "${SCRATCH_MNT}/PPTRS/b"
+		for len in 32 64 96 128 160 192 224 250 255; do
+			len_len="${#len}"
+			tst="$(perl -e "print \"b\" x (${len} - (${len_len} + 1))")"
+			fname="v${tst}${len}"
+			ln "${SCRATCH_MNT}/PPTRS/vlength" \
+				"${SCRATCH_MNT}/PPTRS/${fname}"
+		done
 	fi
 
 	# Copy some real files (xfs tests, I guess...)
