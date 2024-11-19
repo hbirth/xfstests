@@ -28,7 +28,7 @@ static int min_dio_alignment(const char *mntpnt, const char *devname)
 	fd = open(mntpnt, O_TMPFILE | O_RDWR | O_EXCL, 0600);
 	if (fd >= 0 &&
 	    xfstests_statx(fd, "", AT_EMPTY_PATH, STATX_DIOALIGN, &stx) == 0 &&
-	    (stx.stx_mask & STATX_DIOALIGN))
+	    (stx.stx_mask & STATX_DIOALIGN) && stx.stx_dio_offset_align != 0)
 		return stx.stx_dio_offset_align;
 
 	/*
@@ -42,7 +42,7 @@ static int min_dio_alignment(const char *mntpnt, const char *devname)
 		if (dev_fd > 0 &&
 		    fstat(dev_fd, &st) == 0 &&
 		    S_ISBLK(st.st_mode) &&
-		    ioctl(dev_fd, BLKSSZGET, &logical_block_size)) {
+		    ioctl(dev_fd, BLKSSZGET, &logical_block_size) == 0) {
 			return logical_block_size;
 		}
 	}
