@@ -172,6 +172,11 @@ _try_scratch_mkfs_xfs()
 		mkfs_status=$?
 	fi
 
+	if [ $mkfs_status -ne 0 ] && grep -q '^block size [0-9]* cannot be smaller than sector size' "$tmp.mkfserr"; then
+		errormsg="$(grep '^block size [0-9]* cannot be smaller than sector size' "$tmp.mkfserr" | head -n 1)"
+		_notrun "_scratch_mkfs_xfs: $errormsg"
+	fi
+
 	# output mkfs stdout and stderr
 	cat $tmp.mkfsstd
 	cat $tmp.mkfserr >&2
@@ -1179,6 +1184,16 @@ _require_xfs_mkfs_ciname()
 {
 	_scratch_mkfs_xfs_supported -n version=ci >/dev/null 2>&1 \
 		|| _notrun "need case-insensitive naming support in mkfs.xfs"
+}
+
+# this test requires the xfs kernel support ascii-ci feature
+#
+_require_xfs_ciname()
+{
+	_try_scratch_mkfs_xfs -n version=ci >/dev/null 2>&1
+	_try_scratch_mount >/dev/null 2>&1 || \
+		_notrun "XFS doesn't support ascii-ci feature"
+	_scratch_unmount
 }
 
 # this test requires mkfs.xfs have configuration file support

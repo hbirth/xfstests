@@ -1,0 +1,94 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+#
+# FS QA Test 757
+#
+# Test async dio with fsync to test a btrfs bug where a race meant that csums
+# weren't getting written to the log tree, causing corruptions on remount.
+# This can be seen on subpage FSes on Linux 6.4.
+#
+. ./common/preamble
+_begin_fstest auto quick metadata log recoveryloop aio thin
+
+_cleanup()
+{
+	cd /
+	_log_writes_cleanup &> /dev/null
+	_dmthin_cleanup
+	rm -f $tmp.*
+}
+
+
+[ $FSTYP = "btrfs" ] && _fixed_by_kernel_commit e917ff56c8e7 \
+	"btrfs: determine synchronous writers from bio or writeback control"
+
+fio_config=$tmp.fio
+
+. ./common/dmthin
+. ./common/dmlogwrites
+
+# Use thin device as replay device, which requires $SCRATCH_DEV
+_require_scratch_nocheck
+_require_aiodio
+_require_log_writes
+_require_dm_target thin-pool
+
+cat >$fio_config <<EOF
+[global]
+iodepth=128
+direct=1
+ioengine=libaio
+rw=randwrite
+runtime=1s
+[job0]
+rw=randwrite
+filename=$SCRATCH_MNT/file
+size=1g
+fdatasync=1
+EOF
+
+_require_fio $fio_config
+
+cat $fio_config >> $seqres.full
+
+# Use a thin device to provide deterministic discard behavior. Discards are used
+# by the log replay tool for fast zeroing to prevent out-of-order replay issues.
+_test_unmount
+sectors=$(blockdev --getsz $SCRATCH_DEV)
+sectors=$((sectors * 90 / 100))
+_dmthin_init $sectors $sectors
+_log_writes_init $DMTHIN_VOL_DEV
+_log_writes_mkfs >> $seqres.full 2>&1
+_log_writes_mark mkfs
+
+_log_writes_mount
+
+$FIO_PROG $fio_config > $seqres.full 2>&1
+_log_writes_unmount
+
+_log_writes_remove
+
+prev=$(_log_writes_mark_to_entry_number mkfs)
+[ -z "$prev" ] && _fail "failed to locate entry mark 'mkfs'"
+cur=$(_log_writes_find_next_fua $prev)
+[ -z "$cur" ] && _fail "failed to locate next FUA write"
+
+while _soak_loop_running $((100 * TIME_FACTOR)); do
+	_log_writes_replay_log_range $cur $DMTHIN_VOL_DEV >> $seqres.full
+
+	# xfs_repair won't run if the log is dirty
+	if [ $FSTYP = "xfs" ]; then
+		_dmthin_mount
+	fi
+	_dmthin_check_fs
+
+	prev=$cur
+	cur=$(_log_writes_find_next_fua $(($cur + 1)))
+	[ -z "$cur" ] && break
+done
+
+echo "Silence is golden"
+
+# success, all done
+status=0
+exit
