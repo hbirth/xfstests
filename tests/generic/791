@@ -1,0 +1,37 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Horst Birthelmer.  All Rights Reserved.
+#
+# FS QA Test 791
+#
+# test dir open
+#
+. ./common/preamble
+_begin_fstest auto
+
+_require_test
+_require_scratch
+
+# Only run this test on FUSE filesystems
+case "$FSTYP" in
+fuse)
+    source="${SCRATCH_DEV#"source:"}"
+    d_low=$source/dir
+    mkdir -p $d_low
+
+    _scratch_mount 
+    cat $SCRATCH_MNT/dir
+    rmdir $d_low
+
+    status=0
+    exit
+
+	;;
+*)
+	_notrun "This test is only for FUSE filesystems"
+	;;
+esac
+
+
+
+

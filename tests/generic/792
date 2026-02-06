@@ -1,0 +1,33 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Horst Birthelmer.  All Rights Reserved.
+#
+# FS QA Test 792
+#
+# test revalidate without file change 
+#
+. ./common/preamble
+_begin_fstest auto
+
+_require_test
+_require_scratch
+
+# Only run this test on FUSE filesystems
+case "$FSTYP" in
+fuse)
+    _scratch_mount 
+    echo "a" > $SCRATCH_MNT/test_file
+    echo "b" >> $SCRATCH_MNT/test_file
+    echo "c" >> $SCRATCH_MNT/test_file
+    cat $SCRATCH_MNT/test_file
+    rm -f $SCRATCH_MNT/test_file
+    cat $SCRATCH_MNT/test_file
+    status=0
+    exit
+	;;
+*)
+	_notrun "This test is only for FUSE filesystems"
+	;;
+esac
+
+

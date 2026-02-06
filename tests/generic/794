@@ -1,0 +1,43 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Horst Birthelmer.  All Rights Reserved.
+#
+# FS QA Test 794
+#
+# test revalidate by underlying file change but with O_CREAT included.
+# test dentry creation by the atomic revalidate 
+#
+. ./common/preamble
+_begin_fstest auto
+_require_test
+_require_scratch
+
+# Only run this test on FUSE filesystems
+case "$FSTYP" in
+fuse)
+    source="${SCRATCH_DEV#"source:"}"
+
+    s_file=$source/test_file
+    d_file=$SCRATCH_MNT/test_file
+
+    _scratch_mount 
+    echo "atod" > $d_file
+    cat $d_file
+    cat $s_file
+    rm -f $s_file
+    echo "btos" > $s_file
+    echo "ctod" >> $d_file
+    cat $d_file
+    rm -f $d_file
+
+    status=0
+    exit
+
+	;;
+*)
+	_notrun "This test is only for FUSE filesystems"
+	;;
+esac
+
+
+

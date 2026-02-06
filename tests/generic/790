@@ -1,0 +1,44 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Horst Birthelmer.  All Rights Reserved.
+#
+# FS QA Test 790
+#
+# test atomic open (file create) and negative dentry open
+#
+# ensure file does not exist
+# mount scratch
+# echo a > /scratch/dest/file # non-existing file
+# umount and mount /scratch/test (clear cache)
+# cat /scratch/dest/file
+#
+. ./common/preamble
+_begin_fstest auto
+
+_require_test
+_require_scratch
+
+# Only run this test on FUSE filesystems
+case "$FSTYP" in
+fuse) 
+    source="${SCRATCH_DEV#"source:"}"
+
+    d_low=$source/test_file
+    #make sure file is not there
+    rm -f $d_low
+
+    _scratch_mount 
+    echo 'content of the test_file' > $SCRATCH_MNT/test_file
+    _scratch_unmount
+    _scratch_mount 
+    cat $SCRATCH_MNT/test_file
+    status=0
+    exit
+
+	;;
+*)
+	_notrun "This test is only for FUSE filesystems"
+	;;
+esac
+
+

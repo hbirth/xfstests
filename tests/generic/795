@@ -1,0 +1,46 @@
+#! /bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2023 Horst Birthelmer.  All Rights Reserved.
+#
+# test symlink read
+#
+. ./common/preamble
+_begin_fstest auto
+
+_require_test
+_require_scratch
+
+# Only run this test on FUSE filesystems
+case "$FSTYP" in
+fuse)
+	_scratch_mount
+	PATTERN="aa"
+
+	source_file=$SCRATCH_MNT/source_file
+	source_file_link=$SCRATCH_MNT/source_file_link
+
+	echo $PATTERN > $source_file
+	ln -s $source_file $source_file_link
+	if ! RES="$(cat $source_file_link)"; then
+		echo "failed to open symlink"
+		status=11
+	elif [ "$PATTERN" != "$RES" ]; then
+		echo "failed to open symlink - content mismatch"
+		echo "expected: $PATTERN"
+		echo "got: $RES"
+		status=11
+	else
+		echo "Silence is golden"
+		status=0
+	fi
+	rm $source_file
+	rm $source_file_link
+	exit
+
+	;;
+*)
+	_notrun "This test is only for FUSE filesystems"
+	;;
+esac
+
+
