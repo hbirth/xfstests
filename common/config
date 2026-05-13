@@ -363,6 +363,9 @@ _common_mount_opts()
 	fuse)
 		echo $FUSE_MOUNT_OPTIONS
 		;;
+	fusex)
+		echo $FUSEX_MOUNT_OPTIONS
+		;;
 	xfs)
 		echo $XFS_MOUNT_OPTIONS
 		;;
@@ -537,6 +540,8 @@ _source_specific_fs()
 		;;
 	fuse)
 		;;
+	fusex)
+		;;
 	ceph)
 		. ./common/ceph
 		;;
@@ -610,8 +615,8 @@ _check_device()
 	fi
 
 	case "$FSTYP" in
-	9p|fuse|tmpfs|virtiofs|afs)
-		# 9p, fuse, virtiofs and afs mount tags are just plain strings,
+	9p|fuse|fusex|tmpfs|virtiofs|afs)
+		# 9p, fuse, fusex, virtiofs and afs mount tags are just plain strings,
 		# so anything is allowed tmpfs doesn't use mount source, ignore
 		;;
 	ceph)

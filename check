@@ -65,6 +65,7 @@ check options
     -cifs		test CIFS
     -9p			test 9p
     -fuse		test fuse
+    -fusex		test fusex
     -virtiofs		test virtiofs
     -overlay		test overlay
     -pvfs2		test PVFS2
@@ -277,7 +278,7 @@ while [ $# -gt 0 ]; do
 	case "$1" in
 	-\? | -h | --help) usage ;;
 
-	-nfs|-afs|-glusterfs|-cifs|-9p|-fuse|-virtiofs|-pvfs2|-tmpfs|-ubifs)
+	-nfs|-afs|-glusterfs|-cifs|-9p|-fuse|-fusex|-virtiofs|-pvfs2|-tmpfs|-ubifs)
 		FSTYP="${1:1}"
 		;;
 	-overlay)
